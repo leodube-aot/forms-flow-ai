@@ -36,6 +36,8 @@ class IsAuthenticated(BasePermission):
             token = auth.split(" ")[1]
             payload = await keycloak_validator.verify_token(token)
             # Attach token info to context
+            print('token', token)
+            print('payload', payload)
             info.context["user"] = UserContext(token=token, token_info=payload)
             return True
         except Exception as e:
@@ -63,7 +65,6 @@ class HasAnyRole(BasePermission):
 
 
 class Auth:
-
     @staticmethod
     def auth_required(roles: List[str] = None):
         """

@@ -1,13 +1,12 @@
 from datetime import datetime
+
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.sql import func
-
-from src.db.webapi_db import webapi_db
 
 from .authorization import Authorization, AuthType
 from .base import BaseModel
 from .constants import WebApiTables
-from .formprocess_mapper import FormProcessMapper
+from .form_process_mapper import FormProcessMapper
 
 
 class Application(BaseModel):
@@ -16,13 +15,27 @@ class Application(BaseModel):
     This class provides methods to interact with the application table.
     """
 
-    _application = None
+    _table_name = WebApiTables.APPLICATION.value
+    _table = None
 
     @classmethod
-    async def get_table(cls):
-        if cls._application is None:
-            cls._application = await webapi_db.get_table(WebApiTables.APPLICATION.value)
-        return cls._application
+    async def first(cls, **filters):
+        return await super().first(**filters)
+    
+    @classmethod
+    async def find_all(cls, **filters):
+        query = await super().find_all(**filters)
+        table = await cls.get_table()
+
+        # Apply date filters, if any
+        if (order_by := filters.get("order_by")) and hasattr(table.c, order_by):
+            query = query.order_by(order_by)
+            if from_date := filters.get("from_date"):
+                query = query.where(getattr(table.c, order_by) >= datetime.fromisoformat(from_date))
+            if to_date := filters.get("to_date"):
+                query = query.where(getattr(table.c, order_by) <= datetime.fromisoformat(to_date))
+
+        return query
 
     @classmethod
     def filter_query(cls, query, filter_data: dict, application_table, mapper_table):
@@ -35,6 +48,62 @@ class Application(BaseModel):
             )
             if hasattr(model_name.c, field):
                 col = getattr(model_name.c, field)
+                if field == "id":
+                    # Special case for application_id
+                    query = query.where(col == value)
+                else:
+                    # For other fields, use ilike for case-insensitive search
+                    query = query.where(col.ilike(f"%{value}%"))
+
+    @classmethod
+    def paginationed_query(cls, query, page_no: int = 1, limit: int = 5):
+        """
+        Paginate the SQLAlchemy query.
+        """
+        if page_no < 1:
+            page_no = 1
+        if limit < 1:
+            limit = 5
+        return query.limit(limit).offset((page_no - 1) * limit)
+
+    @classmethod
+
+    async def find_aggregated_application_metrics(cls, metric: str, **filters):
+        """Fetch application metrics."""
+        table = await cls.get_table()
+
+        if not hasattr(table.c, metric):
+            return None
+
+        metric_col = getattr(table.c, metric)
+        query = select(
+            metric_col.label("metric"),
+            func.count(table.c.id).label("count")
+        ).group_by(metric_col)
+
+        # Apply filters
+        for key, value in filters.items():
+            if hasattr(table.c, key):
+                query = query.where(getattr(table.c, key) == value)
+        
+        # Apply date filters, if any
+        if (order_by := filters.get("order_by")) and hasattr(table.c, order_by):
+            if from_date := filters.get("from_date"):
+                query = query.where(getattr(table.c, order_by) >= datetime.fromisoformat(from_date))
+            if to_date := filters.get("to_date"):
+                query = query.where(getattr(table.c, order_by) <= datetime.fromisoformat(to_date))
+
+        return query
+    
+
+    @classmethod
+    def filter_query(cls, query, filter: dict, application_table):
+        """
+        Apply filters to the SQLAlchemy query.
+        """
+        for field, value in filter.items():
+            if hasattr(application_table.c, field):
+                col = getattr(application_table.c, field)
                 if field == "id":
                     # Special case for application_id
                     query = query.where(col == value)
