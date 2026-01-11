@@ -1,4 +1,4 @@
-import React, { useReducer, useState, useEffect, useRef } from "react";
+import React, { useReducer, useState, useEffect, useRef, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useParams } from "react-router-dom";
 import { Card } from "react-bootstrap";
@@ -111,6 +111,12 @@ const EditComponent = () => {
     currentFormReducer,
     _cloneDeep(formData)
   );
+  const initialForm = useMemo(() => _cloneDeep(formData), [formData._id]);
+  const builderOptions = useRef({
+    language: lang,
+    alwaysConfirmComponentRemoval: true,
+    i18n: RESOURCE_BUNDLES_DATA,
+  });
 
   /* ------------------ handling form layout and flow layouts ----------------- */
   const [currentLayout, setCurrentLayout] = useState(FORM_LAYOUT);
@@ -1291,7 +1297,7 @@ const handleSaveLayout = () => {
                     {!createDesigns ? (
                       <div className="px-4 pt-4 form-preview">
                         <Form
-                          form={form}
+                          src={form}
                           options={{
                             disableAlerts: true,
                             noAlerts: true,
@@ -1302,15 +1308,10 @@ const handleSaveLayout = () => {
                       </div>
                     ) : (
                       <FormBuilder
-                        key={form._id}
-                        form={form}
+                        key={initialForm._id}
+                        initialForm={initialForm}
                         onChange={formChange}
-
-                        options={{
-                          language: lang,
-                          alwaysConfirmComponentRemoval: true,
-                          i18n: RESOURCE_BUNDLES_DATA,
-                        }}
+                        options={builderOptions.current}
                         onDeleteComponent={captureFormChanges}
                       />
                     )}
